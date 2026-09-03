@@ -1,0 +1,1282 @@
+-- title:   "PacDude 80's"
+-- author:  Team: JeZxLee
+-- desc:    PacMan arcade demake
+-- site:    https://TeamJeZxLee.itch.io
+-- license: MIT License
+-- version: Alpha 3
+-- script:  lua
+
+Scr=0
+ScrNext=1
+ScrTime=700
+
+FadeIdle=-1
+FadeIn=0
+FadeOut=1
+ScrFadeStatus=FadeIn
+ScrFadeScale=31
+
+TextBlink=0
+
+StaticTimer=0
+
+FPS=0
+FrameFPS=0
+TimeCurr=time()
+TimeEnd=(TimeCurr+1000)
+
+DelayInput=20
+
+Dpad1Up=false
+Dpad1Down=false
+Dpad1Left=false
+Dpad1Right=false
+Dpad1A=false
+Dpad1B=false
+
+MouseLeft=false
+MouseX=0
+MouseY=0
+
+Debug=0
+
+MUp=0
+MDown=2
+MLeft=3
+MRight=1
+
+MapTileX=28
+MapTileY=20
+MapScreenX=-112
+MapScreenY=-96
+PlayerMoveX=0
+PlayerMoveY=0
+TileIndex=-1
+
+PlayerNextMove=-1
+PlayerSpriteDir=MRight
+PlayerScreenX=112
+PlayerScreenY=64
+
+CollUp=false
+CollDown=false
+CollLeft=false
+CollRight=false
+
+Pause=false
+PauseOffset=0
+
+Score=0
+Lives=2
+
+PowerFlash=0
+
+BoardOriginal={}
+
+Board={}
+
+PelletCount=0
+
+GhostDrawOrder=0
+
+GhostAnimeTimer=0
+
+GhostDir={MUp,MUp,MUp,MUp,MUp,MUp}
+GhostCollUp={false,false,false,false,false,false}
+GhostCollRight={false,false,false,false,false,false}
+GhostCollDown={false,false,false,false,false,false}
+GhostCollLeft={false,false,false,false,false,false}
+GhostMoveX={0,0,0,0,0,0}
+GhostMoveY={0,0,0,0,0,0}
+GhostScreenX={112,112,112,112,112,112}
+GhostScreenY={32,32,32,32,32,32}
+GhostTileX={28,28,28,28,28,28}
+GhostTileY={16,16,16,16,16,16}
+
+Attack=1
+Scared=2
+Eyes=3
+GhostStatus={Attack,Attack,Attack,Attack,Attack,Attack}
+
+GhostScaredTimer={0,0,0,0,0,0}
+
+GhostEyeBlinkTimer={0,0,0,0,0,0}
+
+PacDudeKilled=-1
+
+BoardReturn={}
+
+GhostNumberEaten=0
+
+ClearedBoard=false
+
+---------------------------------------------------------
+function GetAllInput()
+	Dpad1Up=false
+	Dpad1Down=false
+	Dpad1Left=false
+	Dpad1Right=false
+	Dpad1A=false
+	Dpad1B=false
+
+	MouseLeft=false
+
+	local mx,my,left=mouse()
+	MouseX=mx
+	MouseY=my
+
+ if DelayInput>0 then
+ 	 DelayInput=DelayInput-1
+  return
+ else
+	 DelayInput=0
+
+		if btn(0) then Dpad1Up=true end
+		if btn(1) then Dpad1Down=true end
+		if btn(2) then Dpad1Left=true end
+		if btn(3) then Dpad1Right=true end
+
+		if btn(4) then Dpad1A=true end
+		if btn(5) then Dpad1B=true end
+
+		if left then	MouseLeft=true	end
+
+	end
+end
+
+---------------------------------------------------------
+function DrawScreenOutline(clr)
+	for x=0,240 do
+		pix(x,0,clr)
+		pix(x,135,clr)
+	end
+
+	for y=0,136 do
+		pix(0,y,clr)
+		pix(239,y,clr)
+	end
+end
+
+---------------------------------------------------------
+function ApplyScreenFade()
+	if ScrFadeStatus==FadeIdle then
+		return
+	end
+
+ if ScrFadeStatus==FadeIn then
+ 	if ScrFadeScale>0 then
+  	ScrFadeScale=ScrFadeScale-1
+		else
+			ScrFadeStatus=FadeIdle
+		end
+ elseif ScrFadeStatus==FadeOut then
+ 	if ScrFadeScale<32 then
+  	ScrFadeScale=ScrFadeScale+1
+		else
+			ScrFadeStatus=FadeIn
+			Scr=ScrNext
+
+			if Scr==3 and ClearedBoard==true then
+				ResetGameAfterClear()
+				DelayInput=25
+			end
+
+			if Scr==3 and PacDudeKilled==0 then
+				PacDudeKilled=-1
+				ResetGameAfterDeath()
+				DelayInput=25
+			end
+		end
+	end
+
+	spr(0,120-(4*ScrFadeScale),68-(4*ScrFadeScale),-1,ScrFadeScale,0,0,1,1)
+end
+
+---------------------------------------------------------
+function DrawText(text,x,y,just,fillclr,outlineclr,fixed,scale,smallFont)
+	local xOffset=0
+	local width=print(text,0,-999,outlineclr,fixed,scale,smallFont)
+	if just==0 then xOffset=x end
+	if just==1 then xOffset=(240/2)-(width/2) end
+	if just==2 then xOffset=(240-width)-x end
+
+	local xOff
+	local yOff
+	for yOff=y-1,y+1 do
+		for xOff=xOffset-1,xOffset+1 do
+			if (xOff~=0 and yOff~=0) then
+				print(text,xOff,yOff,outlineclr,fixed,scale,smallFont)
+			end
+		end
+	end
+
+	print(text,xOffset,y,fillclr,fixed,scale,smallFont)
+end
+
+---------------------------------------------------------
+function CheckForScrSkip()
+	if DelayInput>0 then return end
+
+	if	key(48) or Dpad1A==true or MouseLeft==true then
+		ScrTime=0
+		sfx(0,95-46,5,0,15-7,0)
+		DelayInput=20
+	end
+end
+
+---------------------------------------------------------
+function Initialize()
+	for x=1,58+1 do
+	 Board[x]={}
+	 for y=1,34+1 do
+	  Board[x][y]=-1
+	 end
+	end
+
+	for x=1,58+1 do
+	 BoardOriginal[x]={}
+	 for y=1,34+1 do
+	  BoardOriginal[x][y]=-1
+	 end
+	end
+
+	for x=1,58+1 do
+	 for y=1,34+1 do
+	  BoardOriginal[x][y]=mget(x-1,y-1)
+	 end
+	end
+
+	for x=1,58+1+10 do
+	 BoardReturn[x]={}
+	 for y=1,34+1+10 do
+	  BoardReturn[x][y]=-1
+	 end
+	end
+end
+
+---------------------------------------------------------
+function ScreenMIT()
+	cls(0)
+
+	DrawText("Copyright 2026 ''TeamJeZxLee.itch.io''",2,2,0,5,0,false,1,true)
+
+	DrawText("Permission is hereby granted, free of charge, to any person",2,2+1+7,0,6,0,false,1,true)
+	DrawText("obtaining a copy of this software and associated documentation",2,2+1+7+7,0,6,0,false,1,true)
+	DrawText("files (the ''Software''), to deal in the Software without",2,2+1+7+7+7,0,6,0,false,1,true)
+	DrawText("restriction, including without limitation the rights to use, copy,",2,2+1+7+7+7+7,0,6,0,false,1,true)
+	DrawText("modify, merge, publish, distribute, sublicense, and/or sell copies",2,2+1+7+7+7+7+7,0,6,0,false,1,true)
+	DrawText("of the Software, and to permit persons to whom the Software",2,2+1+7+7+7+7+7+7,0,6,0,false,1,true)
+	DrawText("is furnished to do so, subject to the following conditions:",2,2+1+7+7+7+7+7+7+7,0,6,0,false,1,true)
+
+	DrawText("The above copyright notice and this permission notice shall be",2,2+1+7+7+7+7+7+7+7+1+7,0,5,0,false,1,true)
+	DrawText("included in all copies or substantial portions of the Software.",2,2+1+7+7+7+7+7+7+7+1+7+7,0,5,0,false,1,true)
+
+	DrawText("THE SOFTWARE IS PROVIDED ''AS IS'', WITHOUT WARRANTY OF ANY KIND,",2,2+1+7+7+7+7+7+7+7+1+7+7+1+7,0,6,0,false,1,true)
+	DrawText("EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES",2,2+1+7+7+7+7+7+7+7+1+7+7+1+7+7,0,6,0,false,1,true)
+	DrawText("OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND",2,2+1+7+7+7+7+7+7+7+1+7+7+1+7+7+7,0,6,0,false,1,true)
+	DrawText("NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT",2,2+1+7+7+7+7+7+7+7+7+1+7+1+7+7+7+7,0,6,0,false,1,true)
+	DrawText("HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,",2,2+1+7+7+7+7+7+7+7+1+7+7+1+7+7+7+7+7,0,6,0,false,1,true)
+	DrawText("WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,",2,2+1+7+7+7+7+7+7+7+1+7+1+7+7+7+7+7+7+7,0,6,0,false,1,true)
+	DrawText("OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER",2,2+1+7+7+7+7+7+7+7+1+7+1+7+7+7+7+7+7+7+7,0,6,0,false,1,true)
+	DrawText("DEALINGS IN THE SOFTWARE.",2,2+1+7+7+7+7+7+7+7+1+7+1+7+7+7+7+7+7+7+7+7,0,6,0,false,1,true)
+
+	CheckForScrSkip()
+
+	if ScrTime>0 then
+		ScrTime=ScrTime-1
+	else
+		ScrFadeStatus=FadeOut
+		ScrNext=1
+		ScrTime=400
+		DelayInput=100
+		TextBlink=0
+		Initialize()
+	end
+end
+
+---------------------------------------------------------
+function ScreenTIC()
+	cls(13)
+
+	spr(494,120-32,68-32-20,14,4,0,0,2,2)
+
+	DrawText("Made With TIC-80 Game Engine!",0,95,1,12,15,false,1,false)
+
+	DrawText("TIC80.com",0,95+20,1,12,15,false,1,false)
+
+	CheckForScrSkip()
+
+	if ScrTime>0 then
+		ScrTime=ScrTime-1
+	else
+		ScrFadeStatus=FadeOut
+		ScrNext=2
+		DelayInput=100
+		TextBlink=0
+		Initialize()
+	end
+end
+
+---------------------------------------------------------
+function DrawStatic()
+	if StaticTimer<2 then
+		StaticTimer=StaticTimer+1
+	else
+		StaticTimer=0
+	end
+
+	if StaticTimer<1 then return end
+
+	local clr=14
+	local x=math.random(0,239)
+	local y=math.random(0,135)
+	for num=0,10000 do
+		if clr<16 then
+			clr=clr+1
+		else
+			clr=14
+		end
+
+		x=math.random(0,239)
+		y=math.random(0,135)
+		pix(x,y,clr)
+	end
+end
+
+---------------------------------------------------------
+function ReadBoard()
+	for x=1,58+1 do
+	 for y=1,34+1 do
+	  Board[x][y]=mget(x-1,y-1)
+	 end
+	end
+
+	PelletCount=0
+	for x=1,58+1,2 do
+	 for y=1,34+1,2 do
+	  if Board[x][y]==32 then
+				PelletCount=PelletCount+1
+	  elseif Board[x][y]==36 then
+				PelletCount=PelletCount+1
+	  elseif Board[x][y]==34 then
+				PelletCount=PelletCount+1
+			end
+	 end
+	end
+
+	for x=1,58+1 do
+	 for y=1,34+1 do
+	  BoardReturn[x][y]=mget(x+60,y)
+	 end
+	end
+end
+
+---------------------------------------------------------
+function ResetGhosts()
+	GhostDrawOrder=0
+	GhostAnimeTimer=0
+
+	for index=1,6 do
+		GhostDir[index]=MUp
+		GhostCollUp[index]=false
+		GhostCollRight[index]=false
+		GhostCollDown[index]=false
+		GhostCollLeft[index]=false
+		GhostMoveX[index]=0
+		GhostMoveY[index]=0
+		GhostScreenX[index]=112
+		GhostScreenY[index]=32
+		GhostTileX[index]=28
+		GhostTileY[index]=16
+
+		GhostStatus[index]=Attack
+
+		GhostScaredTimer[index]=0
+
+		GhostEyeBlinkTimer[index]=0
+	end
+end
+
+---------------------------------------------------------
+function ResetPacDude()
+	MapTileX=28
+	MapTileY=20
+	MapScreenX=-112
+	MapScreenY=-96
+	PlayerMoveX=0
+	PlayerMoveY=0
+	TileIndex=-1
+
+	PlayerNextMove=-1
+	PlayerSpriteDir=MRight
+	PlayerScreenX=112
+	PlayerScreenY=64
+end
+
+---------------------------------------------------------
+function ScreenTitle()
+	cls(0)
+
+	DrawStatic()
+
+	DrawText("PacDude 80's",0,3,1,12,14,false,3,false)
+	DrawText("PacDude 80's",0,3+2,1,4,14,false,3,false)
+
+	DrawText("TM",240-20,3,0,12,15,false,1,false)
+
+	spr(296,120-8-16-48+8,68-8-25,0,1,0,0,2,2)
+	spr(354,120-8-16-48+8,68-8-25,0,1,0,0,2,2)
+
+	spr(292,120-8-16-32+8,68-8-25,0,1,0,0,2,2)
+	spr(354,120-8-16-32+8,68-8-25,0,1,0,0,2,2)
+
+	spr(288,120-8-16-16+8,68-8-25,0,1,0,0,2,2)
+	spr(354,120-8-16-16+8,68-8-25,0,1,0,0,2,2)
+
+	spr(260,120-8-16+8,68-8-25,0,1,0,1,2,2)
+
+	spr(302,120-8+8,68-8-25,0,1,0,0,2,2)
+
+	spr(290,120-8+16+8,68-8-25,0,1,0,0,2,2)
+	spr(358,120-8+16+8,68-8-25,0,1,0,0,2,2)
+
+	spr(294,120-8+32+8,68-8-25,0,1,0,0,2,2)
+	spr(358,120-8+32+8,68-8-25,0,1,0,0,2,2)
+
+	spr(298,120-8+48+8,68-8-25,0,1,0,0,2,2)
+	spr(358,120-8+48+8,68-8-25,0,1,0,0,2,2)
+
+	if TextBlink<20 then
+		TextBlink=TextBlink+1
+	else
+		TextBlink=0
+	end
+
+	if (TextBlink<16) then
+		DrawText("Press [Z] Key On Keyboard To Start!",0,68-4,1,12,15,false,1,false)
+	end
+
+	DrawText("Press [ESC] Key On Keyboard For Options",0,68+4,1,13,15,false,1,false)
+
+	spr(366,120-8-16+16,68+12+5,15,1,0,0,2,2)
+	spr(398,120-8-16+16,68+12+15+5,15,1,0,0,2,2)
+	spr(430,120-8-16,68+12+15+5,15,1,0,0,2,2)
+	spr(462,120-8-16+16+16,68+12+15+5,15,1,0,0,2,2)
+
+	DrawText("Alpha 3",3,136-8,0,12,15,false,1,false)
+
+	DrawText("TeamJeZxLee.itch.io",0,136-8,1,12,15,false,1,false)
+
+	if	Dpad1A==true then
+		sfx(0,95-46,5,0,15-7,0)
+		ScrFadeStatus=FadeOut
+		ScrNext=3
+		ScrTime=400
+		DelayInput=100
+		Pause=false
+		PauseOffset=0
+
+		ResetGhosts()
+
+		ResetPacDude()
+
+		Score=0
+		Lives=2
+
+		PacDudeKilled=-1
+
+		for x=1,58+1 do
+	 	for y=1,34+1 do
+	  	Board[x][y]=mset(x-1,y-1,BoardOriginal[x][y])
+	 	end
+		end
+	end
+
+	GhostNumberEaten=0
+
+	ReadBoard()
+
+	ClearedBoard=false
+end
+
+---------------------------------------------------------
+function CheckAllColl(tileX,tileY,x,xMax,y,yMax)
+	local stepY=1
+	if y>yMax then stepY=-1 end
+	local stepX=1
+	if x>xMax then stepX=-1 end
+
+	for testY=y,yMax,stepY do
+		for testX= x,xMax,stepX do
+			TileIndex=mget( (tileX+testX),(tileY+testY) )
+			if fget(TileIndex,0)==true then
+			 return true
+			end
+		end
+	end
+
+	return false
+end
+
+---------------------------------------------------------
+function Collision(tileX,tileY,dir)
+	if dir==MUp then
+	 if CheckAllColl(tileX,tileY,0,1,0,-1)==true then
+			return true
+		end
+	elseif dir==MDown then
+	 if CheckAllColl(tileX,tileY,0,1,0,2)==true then
+			return true
+		end
+	elseif dir==MLeft then
+	 if CheckAllColl(tileX,tileY,0,-1,0,1)==true then
+			return true
+		end
+	elseif dir==MRight then
+	 if CheckAllColl(tileX,tileY,0,2,0,1)==true then
+			return true
+		end
+	end
+
+	return false
+end
+
+---------------------------------------------------------
+function CheckForDebug()
+	if DelayInput==0 then
+		if key(4) then
+			if Debug==0 then
+			 Debug=1
+				sfx(0,95-46,5,0,15-7,0)
+				DelayInput=25
+			elseif Debug==1 then
+				Debug=2
+				sfx(0,95-46,5,0,15-7,0)
+				DelayInput=25
+			elseif Debug==2 then
+				Debug=0
+				sfx(0,95-46,5,0,15-7,0)
+				DelayInput=25
+			end
+		end
+	end
+end
+
+---------------------------------------------------------
+function DisplayDebug()
+	if Debug==1 then
+		if	PlayerSpriteDir==MUp then
+			DrawText("MUp",2,29,0,4,0,false,1,true)
+		end
+		if	PlayerSpriteDir==MDown then
+			DrawText("MDown",2,29,0,4,0,false,1,true)
+		end
+		if	PlayerSpriteDir==MLeft then
+			DrawText("MLeft",2,29,0,4,0,false,1,true)
+		end
+		if	PlayerSpriteDir==MRight then
+			DrawText("MRight",2,29,0,4,0,false,1,true)
+		end
+
+		if CollUp==true then
+			DrawText("CUp",2,39,0,4,0,false,1,true)
+		end
+		if CollDown==true then
+			DrawText("CDown",30+2,39,0,4,0,false,1,true)
+		end
+		if CollLeft==true then
+			DrawText("CLeft",60+2,39,0,4,0,false,1,true)
+		end
+		if CollRight==true then
+			DrawText("CRight",90+2,39,0,4,0,false,1,true)
+		end
+
+		DrawText("PlayerNextMove="..PlayerNextMove,2,59,0,4,0,false,1,true)
+
+		DrawText("TileIndex="..TileIndex,2,69,0,4,0,false,1,true)
+
+		DrawText("MapTileX="..MapTileX,2,79,0,4,0,false,1,true)
+		DrawText("MapTileY="..MapTileY,2,89,0,4,0,false,1,true)
+
+		DrawText("MapScreenX="..MapScreenX,2,99,0,4,0,false,1,true)
+		DrawText("MapScreenY="..MapScreenY,2,109,0,4,0,false,1,true)
+
+		DrawText("PlayerMoveX="..PlayerMoveX,2,119,0,4,0,false,1,true)
+		DrawText("PlayerMoveY="..PlayerMoveY,2,129,0,4,0,false,1,true)
+	elseif Debug==2 then
+		if	GhostDir[1]==MUp then
+			DrawText("MUp",2,29,0,4,0,false,1,true)
+		end
+		if	GhostDir[1]==MDown then
+			DrawText("MDown",2,29,0,4,0,false,1,true)
+		end
+		if	GhostDir[1]==MLeft then
+			DrawText("MLeft",2,29,0,4,0,false,1,true)
+		end
+		if	GhostDir[1]==MRight then
+			DrawText("MRight",2,29,0,4,0,false,1,true)
+		end
+
+		if	GhostCollUp[1]==true then
+			DrawText("CUp",2,39,0,4,0,false,1,true)
+		end
+		if	GhostCollDown[1]==true then
+			DrawText("CDown",30+2,39,0,4,0,false,1,true)
+		end
+		if	GhostCollLeft[1]==true then
+			DrawText("CLeft",60+2,39,0,4,0,false,1,true)
+		end
+		if	GhostCollRight[1]==true then
+			DrawText("CRight",90+2,39,0,4,0,false,1,true)
+		end
+
+		DrawText("GhostTileX="..GhostTileX[1],2,79,0,4,0,false,1,true)
+		DrawText("GhostTileY="..GhostTileY[1],2,89,0,4,0,false,1,true)
+
+		DrawText("GhostScreenX="..GhostScreenX[1],2,99,0,4,0,false,1,true)
+		DrawText("GhostScreenY="..GhostScreenY[1],2,109,0,4,0,false,1,true)
+
+		DrawText("GhostMoveX="..GhostMoveX[1],2,119,0,4,0,false,1,true)
+		DrawText("GhostMoveY="..GhostMoveY[1],2,129,0,4,0,false,1,true)
+	end
+end
+
+---------------------------------------------------------
+function AnimatePowerPellets()
+	if PowerFlash<20 then
+		PowerFlash=PowerFlash+1
+	else
+		PowerFlash=0
+	end
+
+	for x=1,58+1 do
+	 for y=1,34+1 do
+			if PowerFlash<14 then
+	 	 if Board[x][y]==36 then mset(x-1,y-1,34) end
+	 	 if Board[x][y]==37 then mset(x-1,y-1,35) end
+	 	 if Board[x][y]==52 then mset(x-1,y-1,50) end
+	 	 if Board[x][y]==53 then mset(x-1,y-1,51) end
+			elseif PowerFlash>13 then
+	 	 if Board[x][y]==34 then mset(x-1,y-1,36) end
+	 	 if Board[x][y]==35 then mset(x-1,y-1,37) end
+	 	 if Board[x][y]==50 then mset(x-1,y-1,52) end
+	 	 if Board[x][y]==51 then mset(x-1,y-1,53) end
+			end
+		end
+	end
+end
+
+---------------------------------------------------------
+function CheckPlayerCollisions()
+	CollUp=false
+	CollDown=false
+	CollLeft=false
+	CollRight=false
+
+	if Collision(MapTileX,MapTileY,MUp)==true then
+		CollUp=true
+	end
+	if Collision(MapTileX,MapTileY,MDown)==true then
+		CollDown=true
+	end
+	if Collision(MapTileX,MapTileY,MLeft)==true then
+		CollLeft=true
+	end
+	if Collision(MapTileX,MapTileY,MRight)==true then
+		CollRight=true
+	end
+
+	for ghost=1,6 do
+		if PlayerScreenY>GhostScreenY[ghost]-12 and PlayerScreenY<GhostScreenY[ghost]+12 then
+			if PlayerScreenX>GhostScreenX[ghost]-12 and PlayerScreenX<GhostScreenX[ghost]+12 then
+				if GhostStatus[ghost]==Attack then
+					PacDudeKilled=300
+				elseif GhostStatus[ghost]==Scared then
+					GhostNumberEaten=GhostNumberEaten+1
+					Score=Score+100+(250*GhostNumberEaten)
+					GhostStatus[ghost]=Eyes
+				end
+			end
+		end
+	end
+end
+
+---------------------------------------------------------
+function MovePlayer()
+	if PlayerMoveY==0 and PlayerMoveX==0 then
+  local boardValue = Board[MapTileX+1][MapTileY+1]
+
+  if boardValue==32 then
+			mset(MapTileX,MapTileY,0)
+			mset(MapTileX+1,MapTileY,1)
+			mset(MapTileX,MapTileY+1,16)
+			mset(MapTileX+1,MapTileY+1,17)
+			Score=Score+10
+			sfx(0,95-46,5,0,15-7,0)
+  elseif boardValue==36 or boardValue==34 then
+			mset(MapTileX,MapTileY,0)
+			mset(MapTileX+1,MapTileY,1)
+			mset(MapTileX,MapTileY+1,16)
+			mset(MapTileX+1,MapTileY+1,17)
+			Score=Score+100
+			sfx(0,95-46,5,0,15-7,0)
+
+			for ghost=1,6 do
+				if GhostStatus[ghost]~=Eyes then
+					GhostScaredTimer[ghost]=1000
+					GhostStatus[ghost]=Scared
+				end
+			end
+		end
+	end
+
+	if Dpad1Up==true then PlayerNextMove=0 end
+	if Dpad1Down==true then PlayerNextMove=2 end
+	if Dpad1Left==true then PlayerNextMove=3 end
+	if Dpad1Right==true then PlayerNextMove=1 end
+
+	if PlayerMoveX==0 and PlayerMoveY==0 then
+	 if PlayerNextMove==0 then
+			if CollUp==false then
+	  	PlayerSpriteDir=0
+		 else
+		 	PlayerNextMove=0
+		 end
+	 elseif PlayerNextMove==2 then
+			if CollDown==false then
+	  	PlayerSpriteDir=2
+		 else
+		 	PlayerNextMove=2
+		 end
+		end
+
+	 if PlayerNextMove==3 then
+			if CollLeft==false then
+	  	PlayerSpriteDir=3
+		 else
+		 	PlayerNextMove=3
+		 end
+	 elseif PlayerNextMove==1 then
+			if CollRight==false then
+	  	PlayerSpriteDir=1
+		 else
+		 	PlayerNextMove=1
+		 end
+		end
+	end
+
+ if PlayerSpriteDir==MUp and CollUp==false then
+		PlayerMoveY=PlayerMoveY-1
+		MapScreenY=MapScreenY+1
+
+		for ghost=1,6 do
+			GhostScreenY[ghost]=GhostScreenY[ghost]+1
+		end
+
+		if math.abs(PlayerMoveY)==8 then
+			if Collision(MapTileX,MapTileY,PlayerSpriteDir)~=true then
+				MapTileY=MapTileY-1
+				PlayerMoveY=0
+			end
+		end
+	end
+
+ if PlayerSpriteDir==MDown and CollDown==false then
+		PlayerMoveY=PlayerMoveY+1
+		MapScreenY=MapScreenY-1
+
+		for ghost=1,6 do
+			GhostScreenY[ghost]=GhostScreenY[ghost]-1
+		end
+
+		if math.abs(PlayerMoveY)==8 then
+			if Collision(MapTileX,MapTileY,PlayerSpriteDir)~=true then
+				MapTileY=MapTileY+1
+				PlayerMoveY=0
+			end
+		end
+	end
+
+ if PlayerSpriteDir==MLeft and CollLeft==false then
+		PlayerMoveX=PlayerMoveX-1
+		MapScreenX=MapScreenX+1
+
+		for ghost=1,6 do
+			GhostScreenX[ghost]=GhostScreenX[ghost]+1
+		end
+
+		if math.abs(PlayerMoveX)==8 then
+			if Collision(MapTileX,MapTileY,PlayerSpriteDir)~=true then
+				MapTileX=MapTileX-1
+				PlayerMoveX=0
+			end
+		end
+	end
+
+ if PlayerSpriteDir==MRight and CollRight==false then
+		PlayerMoveX=PlayerMoveX+1
+		MapScreenX=MapScreenX-1
+
+		for ghost=1,6 do
+			GhostScreenX[ghost]=GhostScreenX[ghost]-1
+		end
+
+		if math.abs(PlayerMoveX)==8 then
+			if Collision(MapTileX,MapTileY,PlayerSpriteDir)~=true then
+				MapTileX=MapTileX+1
+				PlayerMoveX=0
+			end
+		end
+	end
+end
+
+---------------------------------------------------------
+function MoveGhosts()
+	for ghost=1,6 do
+		if GhostMoveX[ghost]==0 and GhostMoveY[ghost]==0 and DelayInput==0 then
+			GhostCollUp[ghost]=false
+			GhostCollRight[ghost]=false
+			GhostCollDown[ghost]=false
+			GhostCollLeft[ghost]=false
+
+			if Collision(GhostTileX[ghost],GhostTileY[ghost],MUp)==true then
+				GhostCollUp[ghost]=true
+			end
+			if Collision(GhostTileX[ghost],GhostTileY[ghost],MDown)==true then
+				GhostCollDown[ghost]=true
+			end
+			if Collision(GhostTileX[ghost],GhostTileY[ghost],MLeft)==true then
+			 GhostCollLeft[ghost]=true
+			end
+			if Collision(GhostTileX[ghost],GhostTileY[ghost],MRight)==true then
+				GhostCollRight[ghost]=true
+			end
+
+			local foundMove=false
+			while foundMove==false do
+				local randomDir=math.random(0,4)
+
+				if GhostTileX[ghost]==28 and GhostTileY[ghost]==16 then
+					if GhostStatus[ghost]==Eyes then
+						GhostStatus[ghost]=Attack
+						GhostScaredTimer[ghost]=0
+					end
+
+					GhostMoveY[ghost]=-1
+					GhostDir[ghost]=MUp
+					foundMove=true
+				end
+
+				if foundMove==false then
+					if GhostStatus[ghost]==Attack then
+						if GhostScreenX[ghost]==PlayerScreenX then
+							if GhostScreenY[ghost]>PlayerScreenY and GhostCollUp[ghost]==false then
+								GhostMoveY[ghost]=-1
+								GhostDir[ghost]=MUp
+								foundMove=true
+							elseif GhostScreenY[ghost]<PlayerScreenY and GhostCollDown[ghost]==false then
+								GhostMoveY[ghost]=1
+								GhostDir[ghost]=MDown
+								foundMove=true
+							end
+						elseif GhostScreenY[ghost]==PlayerScreenY then
+							if GhostScreenX[ghost]>PlayerScreenX and GhostCollLeft[ghost]==false then
+								GhostMoveX[ghost]=-1
+								GhostDir[ghost]=MLeft
+								foundMove=true
+							elseif GhostScreenX[ghost]<PlayerScreenX and GhostCollRight[ghost]==false then
+								GhostMoveX[ghost]=1
+								GhostDir[ghost]=MRight
+								foundMove=true
+							end
+						end
+					elseif GhostStatus[ghost]==Eyes then
+						local gY=GhostTileY[ghost]
+						local gX=GhostTileX[ghost]
+
+						if BoardReturn[gX][gY]==240 then
+							GhostMoveY[ghost]=-1
+							GhostDir[ghost]=MUp
+							foundMove=true
+						elseif BoardReturn[gX][gY]==242 then
+							GhostMoveY[ghost]=1
+							GhostDir[ghost]=MDown
+							foundMove=true
+						elseif BoardReturn[gX][gY]==243 then
+							GhostMoveX[ghost]=-1
+							GhostDir[ghost]=MLeft
+							foundMove=true
+						elseif BoardReturn[gX][gY]==241 then
+							GhostMoveX[ghost]=1
+							GhostDir[ghost]=MRight
+							foundMove=true
+						elseif BoardReturn[gX][gY]==245 then
+							local randomHorizontal=math.random(1, 2)
+							if randomHorizontal==1 then
+								GhostMoveX[ghost]=-1
+								GhostDir[ghost]=MLeft
+								foundMove=true
+							elseif randomHorizontal==2 then
+								GhostMoveX[ghost]=1
+								GhostDir[ghost]=MRight
+								foundMove=true
+							end
+						end
+					end
+				end
+
+				if foundMove==false then
+					if randomDir==0 and GhostCollUp[ghost]==false and GhostDir[ghost]~=MDown then
+						GhostMoveY[ghost]=-1
+						GhostDir[ghost]=MUp
+						foundMove=true
+					end
+					if randomDir==1 and GhostCollRight[ghost]==false and GhostDir[ghost]~=MLeft then
+						GhostMoveX[ghost]=1
+						GhostDir[ghost]=MRight
+						foundMove=true
+					end
+					if randomDir==2 and GhostCollDown[ghost]==false and GhostDir[ghost]~=MUp then
+						GhostMoveY[ghost]=1
+						GhostDir[ghost]=MDown
+						foundMove=true
+					end
+					if randomDir==3 and GhostCollLeft[ghost]==false and GhostDir[ghost]~=MRight then
+						GhostMoveX[ghost]=-1
+						GhostDir[ghost]=MLeft
+						foundMove=true
+					end
+				end
+			end
+		end
+
+		if (GhostMoveY[ghost]>-16 and GhostMoveY[ghost]<0) then
+			GhostMoveY[ghost]=GhostMoveY[ghost]-1
+		elseif GhostMoveY[ghost]==-16 then
+			GhostMoveY[ghost]=0
+			GhostScreenY[ghost]=GhostScreenY[ghost]-16
+			GhostTileY[ghost]=GhostTileY[ghost]-2
+		end
+
+		if (GhostMoveY[ghost]<16 and GhostMoveY[ghost]>0) then
+			GhostMoveY[ghost]=GhostMoveY[ghost]+1
+		elseif GhostMoveY[ghost]==16 then
+			GhostMoveY[ghost]=0
+			GhostScreenY[ghost]=GhostScreenY[ghost]+16
+			GhostTileY[ghost]=GhostTileY[ghost]+2
+		end
+
+		if (GhostMoveX[ghost]>-16 and GhostMoveX[ghost]<0) then
+			GhostMoveX[ghost]=GhostMoveX[ghost]-1
+		elseif GhostMoveX[ghost]==-16 then
+			GhostMoveX[ghost]=0
+			GhostScreenX[ghost]=GhostScreenX[ghost]-16
+			GhostTileX[ghost]=GhostTileX[ghost]-2
+		end
+
+		if (GhostMoveX[ghost]<16 and GhostMoveX[ghost]>0) then
+			GhostMoveX[ghost]=GhostMoveX[ghost]+1
+		elseif GhostMoveX[ghost]==16 then
+			GhostMoveX[ghost]=0
+			GhostScreenX[ghost]=GhostScreenX[ghost]+16
+			GhostTileX[ghost]=GhostTileX[ghost]+2
+		end
+	end
+end
+
+---------------------------------------------------------
+function DrawPlayer()
+	if PacDudeKilled==-1 or PacDudeKilled>250 then
+		if (PlayerSpriteDir== MUp or PlayerSpriteDir == MDown) then
+			if math.abs(PlayerMoveY)<2 then
+				spr(260,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			elseif math.abs(PlayerMoveY)<4 then
+				spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			elseif math.abs(PlayerMoveY)<6 then
+				spr(256,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			elseif math.abs(PlayerMoveY)<8 then
+				spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			else
+				spr(260,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			end
+		elseif (PlayerSpriteDir== MLeft or PlayerSpriteDir == MRight) then
+			if math.abs(PlayerMoveX)<2 then
+				spr(260,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			elseif math.abs(PlayerMoveX)<4 then
+				spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			elseif math.abs(PlayerMoveX)<6 then
+				spr(256,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			elseif math.abs(PlayerMoveX)<8 then
+				spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			else
+				spr(260,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+			end
+		end
+	elseif PacDudeKilled>200 then
+		spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	elseif PacDudeKilled>175 then
+		spr(260,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	elseif PacDudeKilled>150 then
+		spr(262,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	elseif PacDudeKilled>125 then
+		spr(264,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	elseif PacDudeKilled>100 then
+		spr(266,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	elseif PacDudeKilled>75 then
+		spr(268,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	elseif PacDudeKilled>50 then
+		spr(270,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	end
+end
+
+---------------------------------------------------------
+function DrawGhosts()
+	if Pause==false then
+		if GhostDrawOrder<1 then
+			GhostDrawOrder=GhostDrawOrder+1
+		else
+			GhostDrawOrder=0
+		end
+
+		if GhostAnimeTimer<6 then
+			GhostAnimeTimer=GhostAnimeTimer+1
+		else
+			GhostAnimeTimer=0
+		end
+
+		for ghost=1,6 do
+			if GhostScaredTimer[ghost]>0 then
+				GhostScaredTimer[ghost]=GhostScaredTimer[ghost]-1
+			end
+
+			if	GhostScaredTimer[ghost]==1 then
+				GhostScaredTimer[ghost]=0
+
+				GhostNumberEaten=0
+
+				if GhostStatus[ghost]==Scared then
+					GhostStatus[ghost]=Attack
+				end
+			end
+		end
+
+		for ghost=1,6 do
+			if GhostEyeBlinkTimer[ghost]<100 then
+				GhostEyeBlinkTimer[ghost]=GhostEyeBlinkTimer[ghost]+1
+			else
+				GhostEyeBlinkTimer[ghost]=0
+			end
+		end
+	end
+
+	local start=1
+	local theend=6
+	local step=1
+
+	if GhostDrawOrder==1 then
+		start=6
+		theend=1
+		step=-1
+	end
+
+	for ghost=start,theend,step do
+		local ghostFrame=288+((ghost-1)*2)
+
+		if GhostScaredTimer[ghost]>0 then ghostFrame=300 end
+
+		if GhostAnimeTimer>2 then
+			ghostFrame=320+((ghost-1)*2)
+
+			if GhostScaredTimer[ghost]>50 then ghostFrame=332 end
+
+			if (GhostScaredTimer[ghost]>0 and GhostScaredTimer[ghost]<51) and GhostScaredTimer[ghost]%2==0 then
+				ghostFrame=332
+			end
+		end
+
+		if GhostStatus[ghost] ~= Eyes then
+			spr(ghostFrame,GhostScreenX[ghost]+GhostMoveX[ghost],GhostScreenY[ghost]+GhostMoveY[ghost],0,1,0,0,2,2)
+		end
+
+		local eyesDir=352
+		if GhostStatus[ghost]==Attack or GhostStatus[ghost]==Eyes then
+			if GhostDir[ghost]==MUp then eyesDir=352 end
+			if GhostDir[ghost]==MRight then eyesDir=354 end
+			if GhostDir[ghost]==MDown then eyesDir=356 end
+			if GhostDir[ghost]==MLeft then eyesDir=358 end
+		elseif GhostStatus[ghost]==Scared then
+			if GhostDir[ghost]==MDown then eyesDir=352 end
+			if GhostDir[ghost]==MLeft then eyesDir=354 end
+			if GhostDir[ghost]==MUp then eyesDir=356 end
+			if GhostDir[ghost]==MRight then eyesDir=358 end
+		end
+
+		if GhostEyeBlinkTimer[ghost]<90 then
+			spr(eyesDir,GhostScreenX[ghost]+GhostMoveX[ghost],GhostScreenY[ghost]+GhostMoveY[ghost],0,1,0,0,2,2)
+		end
+	end
+end
+
+---------------------------------------------------------
+function ResetGameAfterDeath()
+	ClearedBoard=false
+
+	ResetGhosts()
+
+	ResetPacDude()
+
+	PacDudeKilled=-1
+
+--	for x=1,58+1 do
+-- 	for y=1,34+1 do
+--  	Board[x][y]=mset(x-1,y-1,BoardOriginal[x][y])
+-- 	end
+--	end
+
+	GhostNumberEaten=0
+
+	ReadBoard()
+end
+
+---------------------------------------------------------
+function ResetGameAfterClear()
+	ClearedBoard=false
+
+	ResetGhosts()
+
+	ResetPacDude()
+
+	PacDudeKilled=-1
+
+	for x=1,58+1 do
+ 	for y=1,34+1 do
+  	Board[x][y]=mset(x-1,y-1,BoardOriginal[x][y])
+ 	end
+	end
+
+	GhostNumberEaten=0
+
+	ReadBoard()
+end
+
+---------------------------------------------------------
+function	CheckForBoardClear()
+	if PelletCount==0 then
+		ClearedBoard=true
+
+		ScrFadeStatus=FadeOut
+		ScrNext=3
+		ScrTime=400
+		DelayInput=100
+		Pause=false
+		PauseOffset=0
+	end
+end
+
+---------------------------------------------------------
+function ScreenPlaying()
+	cls(0)
+
+	if Pause==false and DelayInput==0 then
+		CheckForDebug()
+
+		CheckForBoardClear()
+
+		if PacDudeKilled==-1 then
+			CheckPlayerCollisions()
+			MovePlayer()
+			MoveGhosts()
+		elseif PacDudeKilled>0 then
+			PacDudeKilled=PacDudeKilled-1
+			if PacDudeKilled==1 then
+				ScrFadeStatus=FadeOut
+
+				if Lives>0 then
+					ScrNext=3
+					Lives=Lives-1
+				elseif Lives==0 then
+					ScrNext=2
+				end
+			end
+		end
+
+		ReadBoard()
+
+		AnimatePowerPellets()
+	end
+
+	map(0,0,30*2,18*2,MapScreenX,MapScreenY)
+
+	DrawPlayer()
+
+	if PacDudeKilled==-1 or PacDudeKilled>250 then
+		DrawGhosts()
+	end
+
+ DrawText("Score:"..Score,0,2,1,4,0,false,1,true)
+
+	spr(334,(240/2)-4-4,136-9-6,0,1,0,0,2,2)
+ DrawText("X"..Lives,(240/2)+4,136-9,0,4,0,false,1,true)
+
+	DisplayDebug()
+
+	if key(48) and DelayInput==0 then
+		sfx(0,95-46,5,0,15-7,0)
+		if Pause==false then
+			Pause=true
+			DelayInput=20
+		elseif Pause==true then
+			Pause=false
+			DelayInput=20
+		end
+	end
+
+	if Pause==true then
+--		if PauseOffset==0 then
+--			PauseOffset=-1
+--		elseif PauseOffset==-1 then
+--			PauseOffset=0
+--		end
+
+		for x=PauseOffset,248,8 do
+			for y=0,142,8 do
+				spr(255,x,y,15,1,0,0,1,1)
+			end
+		end
+
+		DrawText("PAUSED!",0,(136/2)-10,1,4,15,false,2,true)
+		DrawText("Press [Spacebar] On Keyboard To Play!",0,(136/2)+10,1,4,15,false,1,true)
+	end
+end
+
+---------------------------------------------------------
+function TIC()
+	FrameFPS=FrameFPS+1
+
+	GetAllInput()
+
+	if Scr==0 then
+		ScreenMIT()
+	elseif Scr==1 then
+		ScreenTIC()
+	elseif Scr==2 then
+		ScreenTitle()
+	elseif Scr==3 then
+		ScreenPlaying()
+	end
+
+	ApplyScreenFade()
+
+	TimeCurr = time()
+	if TimeCurr>TimeEnd then
+		FPS=FrameFPS
+		TimeEnd = time()+1000
+		FrameFPS=0
+	end
+
+	if Scr>0 then
+	 DrawText("P"..PelletCount.." X"..MouseX.." Y"..MouseY.." F"..FPS,2,136-8,2,13,0,false,1,true)
+
+		DrawScreenOutline(12)
+	end
+end
