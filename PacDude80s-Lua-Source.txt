@@ -473,7 +473,7 @@ function ScreenTitle()
 	spr(430,120-8-16,68+12+15+5,15,1,0,0,2,2)
 	spr(462,120-8-16+16+16,68+12+15+5,15,1,0,0,2,2)
 
-	DrawText("Alpha 3",3,136-8,0,12,15,false,1,false)
+	DrawText("Alpha 4",3,136-8,0,12,15,false,1,false)
 
 	DrawText("TeamJeZxLee.itch.io",0,136-8,1,12,15,false,1,false)
 
