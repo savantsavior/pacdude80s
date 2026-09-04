@@ -3,8 +3,8 @@
 -- desc:    PacMan arcade demake
 -- site:    https://TeamJeZxLee.itch.io
 -- license: MIT License
--- version: Alpha 3
--- script:  lua
+-- version: Alpha 4
+-- script:  Lua
 
 Scr=0
 ScrNext=1
@@ -108,7 +108,11 @@ BoardReturn={}
 
 GhostNumberEaten=0
 
-ClearedBoard=false
+ClearedBoard=-1
+
+PaletteRed={}
+PaletteGreen={}
+PaletteBlue={}
 
 ---------------------------------------------------------
 function GetAllInput()
@@ -176,7 +180,7 @@ function ApplyScreenFade()
 			ScrFadeStatus=FadeIn
 			Scr=ScrNext
 
-			if Scr==3 and ClearedBoard==true then
+			if Scr==3 and ClearedBoard==0 then
 				ResetGameAfterClear()
 				DelayInput=25
 			end
@@ -252,6 +256,13 @@ function Initialize()
 	  BoardReturn[x][y]=-1
 	 end
 	end
+
+ for index=0,15 do
+  local base = 0x3FC0+(index*3)
+  PaletteRed[index]=peek(base+0)
+  PaletteGreen[index]=peek(base+1)
+  PaletteBlue[index]=peek(base+2)
+	end
 end
 
 ---------------------------------------------------------
@@ -313,7 +324,6 @@ function ScreenTIC()
 		ScrNext=2
 		DelayInput=100
 		TextBlink=0
-		Initialize()
 	end
 end
 
@@ -496,7 +506,7 @@ function ScreenTitle()
 
 	ReadBoard()
 
-	ClearedBoard=false
+	ClearedBoard=-1
 end
 
 ---------------------------------------------------------
@@ -703,6 +713,8 @@ end
 
 ---------------------------------------------------------
 function MovePlayer()
+	if ClearedBoard>-1 then return end
+
 	if PlayerMoveY==0 and PlayerMoveX==0 then
   local boardValue = Board[MapTileX+1][MapTileY+1]
 
@@ -832,6 +844,8 @@ end
 
 ---------------------------------------------------------
 function MoveGhosts()
+	if ClearedBoard>-1 then return end
+
 	for ghost=1,6 do
 		if GhostMoveX[ghost]==0 and GhostMoveY[ghost]==0 and DelayInput==0 then
 			GhostCollUp[ghost]=false
@@ -1119,7 +1133,7 @@ end
 
 ---------------------------------------------------------
 function ResetGameAfterDeath()
-	ClearedBoard=false
+	ClearedBoard=-1
 
 	ResetGhosts()
 
@@ -1127,20 +1141,18 @@ function ResetGameAfterDeath()
 
 	PacDudeKilled=-1
 
---	for x=1,58+1 do
--- 	for y=1,34+1 do
---  	Board[x][y]=mset(x-1,y-1,BoardOriginal[x][y])
--- 	end
---	end
-
 	GhostNumberEaten=0
 
 	ReadBoard()
+
+	ChangePaletteColor(13,95,176,194)
+
+	ResetPaletteColors()
 end
 
 ---------------------------------------------------------
 function ResetGameAfterClear()
-	ClearedBoard=false
+	ClearedBoard=-1
 
 	ResetGhosts()
 
@@ -1157,24 +1169,60 @@ function ResetGameAfterClear()
 	GhostNumberEaten=0
 
 	ReadBoard()
+
+	ChangePaletteColor(13,95,176,194)
+
+	ResetPaletteColors()
 end
 
 ---------------------------------------------------------
 function	CheckForBoardClear()
-	if PelletCount==0 then
-		ClearedBoard=true
+	if ClearedBoard>-1 then return end
 
-		ScrFadeStatus=FadeOut
-		ScrNext=3
-		ScrTime=400
-		DelayInput=100
-		Pause=false
-		PauseOffset=0
+	if PelletCount==0 then
+		ClearedBoard=250
+	end
+end
+---------------------------------------------------------
+function ChangePaletteColor(index,r,g,b)
+ local addr=0x03FC0+(index*3)
+
+ poke(addr,r)
+ poke(addr+1,g)
+ poke(addr+2,b)
+end
+
+---------------------------------------------------------
+function ResetPaletteColors()
+ for index=0,15 do
+  local addr = 0x3FC0+(index*3)
+  poke(addr,PaletteRed[index])
+  poke(addr+1,PaletteGreen[index])
+  poke(addr+2,PaletteBlue[index])
 	end
 end
 
 ---------------------------------------------------------
 function ScreenPlaying()
+	if	ClearedBoard>0 then
+		ChangePaletteColor(13,95,176,194)
+
+		ClearedBoard=ClearedBoard-1
+
+		if ClearedBoard%10==0 or ClearedBoard%11==0 or ClearedBoard%12==0 or ClearedBoard%13==0 or ClearedBoard%14==0 then
+			ChangePaletteColor(13,255,255,255)
+		end
+
+		if ClearedBoard==0 then
+			ScrFadeStatus=FadeOut
+			ScrNext=3
+			ScrTime=400
+			DelayInput=100
+			Pause=false
+			PauseOffset=0
+		end
+	end
+
 	cls(0)
 
 	if Pause==false and DelayInput==0 then
@@ -1220,29 +1268,38 @@ function ScreenPlaying()
 
 	DisplayDebug()
 
-	if key(48) and DelayInput==0 then
+	if key(48) and DelayInput==0 and PacDudeKilled==-1 and ClearedBoard==-1 then
 		sfx(0,95-46,5,0,15-7,0)
 		if Pause==false then
 			Pause=true
 			DelayInput=20
+
+			for index=0,15 do
+				for indexTwo=0,50 do
+					local base=0x3FC0+(index*3)
+    	local r=peek(base+0)
+    	local g=peek(base+1)
+    	local b=peek(base+2)
+
+     if r>0 then r=r-1 end
+     if g>0 then g=g-1 end
+     if b>0 then b=b-1 end
+     poke(base,r,g,b)
+				end
+			end
 		elseif Pause==true then
 			Pause=false
 			DelayInput=20
+			ResetPaletteColors()
 		end
 	end
 
 	if Pause==true then
---		if PauseOffset==0 then
---			PauseOffset=-1
---		elseif PauseOffset==-1 then
---			PauseOffset=0
+--		for x=PauseOffset,248,8 do
+--			for y=0,142,8 do
+--				spr(255,x,y,15,1,0,0,1,1)
+--			end
 --		end
-
-		for x=PauseOffset,248,8 do
-			for y=0,142,8 do
-				spr(255,x,y,15,1,0,0,1,1)
-			end
-		end
 
 		DrawText("PAUSED!",0,(136/2)-10,1,4,15,false,2,true)
 		DrawText("Press [Spacebar] On Keyboard To Play!",0,(136/2)+10,1,4,15,false,1,true)
