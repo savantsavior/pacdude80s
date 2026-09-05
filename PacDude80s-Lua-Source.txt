@@ -114,6 +114,8 @@ PaletteRed={}
 PaletteGreen={}
 PaletteBlue={}
 
+GhostScaredEffectTimer=0
+
 ---------------------------------------------------------
 function GetAllInput()
 	Dpad1Up=false
@@ -405,6 +407,10 @@ function ResetGhosts()
 
 		GhostEyeBlinkTimer[index]=0
 	end
+
+	GhostScaredEffectTimer=0
+
+	sfx(-1,43,60,1,15-7,0)
 end
 
 ---------------------------------------------------------
@@ -700,11 +706,12 @@ function CheckPlayerCollisions()
 		if PlayerScreenY>GhostScreenY[ghost]-12 and PlayerScreenY<GhostScreenY[ghost]+12 then
 			if PlayerScreenX>GhostScreenX[ghost]-12 and PlayerScreenX<GhostScreenX[ghost]+12 then
 				if GhostStatus[ghost]==Attack then
-					PacDudeKilled=300
+					PacDudeKilled=40
 				elseif GhostStatus[ghost]==Scared then
 					GhostNumberEaten=GhostNumberEaten+1
 					Score=Score+100+(250*GhostNumberEaten)
 					GhostStatus[ghost]=Eyes
+					sfx(2,43,15,2,15-7,0)
 				end
 			end
 		end
@@ -732,6 +739,8 @@ function MovePlayer()
 			mset(MapTileX+1,MapTileY+1,17)
 			Score=Score+100
 			sfx(0,95-46,5,0,15-7,0)
+
+			GhostScaredEffectTimer=100
 
 			for ghost=1,6 do
 				if GhostStatus[ghost]~=Eyes then
@@ -1000,7 +1009,7 @@ end
 
 ---------------------------------------------------------
 function DrawPlayer()
-	if PacDudeKilled==-1 or PacDudeKilled>250 then
+	if PacDudeKilled==-1 or PacDudeKilled>35 then
 		if (PlayerSpriteDir== MUp or PlayerSpriteDir == MDown) then
 			if math.abs(PlayerMoveY)<2 then
 				spr(260,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
@@ -1026,20 +1035,25 @@ function DrawPlayer()
 				spr(260,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
 			end
 		end
-	elseif PacDudeKilled>200 then
+	elseif PacDudeKilled==35 then
 		spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
-	elseif PacDudeKilled>175 then
+		sfx(3,43,90,3,15-7,0)
+	elseif PacDudeKilled>35 then
+		spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	elseif PacDudeKilled>30 then
 		spr(260,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
-	elseif PacDudeKilled>150 then
+	elseif PacDudeKilled>25 then
 		spr(262,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
-	elseif PacDudeKilled>125 then
+	elseif PacDudeKilled>20 then
 		spr(264,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
-	elseif PacDudeKilled>100 then
+	elseif PacDudeKilled>15 then
 		spr(266,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
-	elseif PacDudeKilled>75 then
+	elseif PacDudeKilled>10 then
 		spr(268,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
-	elseif PacDudeKilled>50 then
+	elseif PacDudeKilled>5 then
 		spr(270,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
+	elseif PacDudeKilled==1 then
+		sfx(-1,43,90,3,15-7,0)
 	end
 end
 
@@ -1058,8 +1072,10 @@ function DrawGhosts()
 			GhostAnimeTimer=0
 		end
 
+		local aGhostIsScared=false
 		for ghost=1,6 do
 			if GhostScaredTimer[ghost]>0 then
+				aGhostIsScared=true
 				GhostScaredTimer[ghost]=GhostScaredTimer[ghost]-1
 			end
 
@@ -1072,6 +1088,20 @@ function DrawGhosts()
 					GhostStatus[ghost]=Attack
 				end
 			end
+		end
+
+		if aGhostIsScared==true then
+			if GhostScaredEffectTimer>0 then
+				if GhostScaredEffectTimer%25==0 then
+					sfx(1,43,30,1,15-7,0)
+				end
+
+				GhostScaredEffectTimer=GhostScaredEffectTimer-1
+
+				if GhostScaredEffectTimer==0 then GhostScaredEffectTimer=100 end
+			end
+		else
+			sfx(-1,43,60,1,15-7,0)
 		end
 
 		for ghost=1,6 do
@@ -1148,6 +1178,8 @@ function ResetGameAfterDeath()
 	ChangePaletteColor(13,95,176,194)
 
 	ResetPaletteColors()
+
+	sfx(-1,43,60,1,15-7,0)
 end
 
 ---------------------------------------------------------
@@ -1173,6 +1205,8 @@ function ResetGameAfterClear()
 	ChangePaletteColor(13,95,176,194)
 
 	ResetPaletteColors()
+
+	sfx(-1,43,60,1,15-7,0)
 end
 
 ---------------------------------------------------------
