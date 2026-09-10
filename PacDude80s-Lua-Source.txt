@@ -1,9 +1,10 @@
 -- title:   "PacDude 80's"
+-- saveid:  PD80s-B1F-High_Score
 -- author:  Team: JeZxLee
 -- desc:    PacMan arcade demake
 -- site:    https://TeamJeZxLee.itch.io
 -- license: MIT License
--- version: Alpha 4
+-- version: Beta 1 Final
 -- script:  Lua
 
 Scr=0
@@ -68,6 +69,11 @@ PauseOffset=0
 
 Score=0
 Lives=2
+
+HighScore=pmem(0)
+NewHighScoreAcheived=false
+
+OneUp=false
 
 PowerFlash=0
 
@@ -440,6 +446,8 @@ function ScreenTitle()
 
 	DrawText("TM",240-20,3,0,12,15,false,1,false)
 
+	DrawText("High Score: "..HighScore,0,26,1,12,15,false,1,false)
+
 	spr(296,120-8-16-48+8,68-8-25,0,1,0,0,2,2)
 	spr(354,120-8-16-48+8,68-8-25,0,1,0,0,2,2)
 
@@ -479,7 +487,7 @@ function ScreenTitle()
 	spr(430,120-8-16,68+12+15+5,15,1,0,0,2,2)
 	spr(462,120-8-16+16+16,68+12+15+5,15,1,0,0,2,2)
 
-	DrawText("Alpha 4",3,136-8,0,12,15,false,1,false)
+	DrawText("Beta 1 Final",3,136-8,0,12,15,false,1,true)
 
 	DrawText("TeamJeZxLee.itch.io",0,136-8,1,12,15,false,1,false)
 
@@ -498,6 +506,10 @@ function ScreenTitle()
 
 		Score=0
 		Lives=2
+
+		OneUp=false
+
+		NewHighScoreAcheived=false
 
 		PacDudeKilled=-1
 
@@ -570,6 +582,10 @@ function CheckForDebug()
 				sfx(0,95-46,5,0,15-7,0)
 				DelayInput=25
 			elseif Debug==2 then
+				Debug=3
+				sfx(0,95-46,5,0,15-7,0)
+				DelayInput=25
+			elseif Debug==3 then
 				Debug=0
 				sfx(0,95-46,5,0,15-7,0)
 				DelayInput=25
@@ -580,7 +596,7 @@ end
 
 ---------------------------------------------------------
 function DisplayDebug()
-	if Debug==1 then
+	if Debug==2 then
 		if	PlayerSpriteDir==MUp then
 			DrawText("MUp",2,29,0,4,0,false,1,true)
 		end
@@ -619,7 +635,7 @@ function DisplayDebug()
 
 		DrawText("PlayerMoveX="..PlayerMoveX,2,119,0,4,0,false,1,true)
 		DrawText("PlayerMoveY="..PlayerMoveY,2,129,0,4,0,false,1,true)
-	elseif Debug==2 then
+	elseif Debug==3 then
 		if	GhostDir[1]==MUp then
 			DrawText("MUp",2,29,0,4,0,false,1,true)
 		end
@@ -1037,7 +1053,7 @@ function DrawPlayer()
 		end
 	elseif PacDudeKilled==35 then
 		spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
-		sfx(3,43,90,3,15-7,0)
+		sfx(3,43,60,3,15-7,1)
 	elseif PacDudeKilled>35 then
 		spr(258,PlayerScreenX,PlayerScreenY,0,1,0,PlayerSpriteDir,2,2)
 	elseif PacDudeKilled>30 then
@@ -1278,6 +1294,11 @@ function ScreenPlaying()
 					Lives=Lives-1
 				elseif Lives==0 then
 					ScrNext=2
+
+					if Score>HighScore then
+						HighScore=Score
+					end
+					pmem(0,HighScore)
 				end
 			end
 		end
@@ -1295,7 +1316,23 @@ function ScreenPlaying()
 		DrawGhosts()
 	end
 
- DrawText("Score:"..Score,0,2,1,4,0,false,1,true)
+	if Score>HighScore then
+		if NewHighScoreAcheived==false then
+			NewHighScoreAcheived=true
+			sfx(4,43,200,3,15-7,0)
+		end
+
+		HighScore=Score
+	end
+
+	if Score>50000 and OneUp==false then
+		OneUp=true
+		Lives=Lives+1
+		sfx(4,43,50,3,15-7,0)
+	end
+
+	DrawText("High Score: "..HighScore,0,2,1,4,0,false,1,true)
+ DrawText("Score:"..Score,0,2+8,1,4,0,false,1,true)
 
 	spr(334,(240/2)-4-4,136-9-6,0,1,0,0,2,2)
  DrawText("X"..Lives,(240/2)+4,136-9,0,4,0,false,1,true)
@@ -1308,17 +1345,19 @@ function ScreenPlaying()
 			Pause=true
 			DelayInput=20
 
-			for index=0,15 do
-				for indexTwo=0,50 do
-					local base=0x3FC0+(index*3)
-    	local r=peek(base+0)
-    	local g=peek(base+1)
-    	local b=peek(base+2)
+			if Debug~=1 then
+				for index=0,15 do
+					for indexTwo=0,50 do
+						local base=0x3FC0+(index*3)
+	    	local r=peek(base+0)
+	    	local g=peek(base+1)
+	    	local b=peek(base+2)
 
-     if r>0 then r=r-1 end
-     if g>0 then g=g-1 end
-     if b>0 then b=b-1 end
-     poke(base,r,g,b)
+	     if r>0 then r=r-1 end
+	     if g>0 then g=g-1 end
+	     if b>0 then b=b-1 end
+	     poke(base,r,g,b)
+					end
 				end
 			end
 		elseif Pause==true then
@@ -1328,13 +1367,7 @@ function ScreenPlaying()
 		end
 	end
 
-	if Pause==true then
---		for x=PauseOffset,248,8 do
---			for y=0,142,8 do
---				spr(255,x,y,15,1,0,0,1,1)
---			end
---		end
-
+	if Pause==true and Debug~=1 then
 		DrawText("PAUSED!",0,(136/2)-10,1,4,15,false,2,true)
 		DrawText("Press [Spacebar] On Keyboard To Play!",0,(136/2)+10,1,4,15,false,1,true)
 	end
@@ -1365,9 +1398,10 @@ function TIC()
 		FrameFPS=0
 	end
 
-	if Scr>0 then
+	if Debug>0 and Pause==false then
 	 DrawText("P"..PelletCount.." X"..MouseX.." Y"..MouseY.." F"..FPS,2,136-8,2,13,0,false,1,true)
-
-		DrawScreenOutline(12)
 	end
+
+	DrawScreenOutline(12)
 end
+-- A 110% By "TeamJeZxLee.itch.io"
